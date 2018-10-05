@@ -14,7 +14,8 @@ var HttpClient = require('./http'),
   debug = require('debug')('strong-soap:client'),
   debugDetail = require('debug')('strong-soap:client:detail'),
   debugSensitive = require('debug')('strong-soap:client:sensitive'),
-  utils = require('./utils');
+  utils = require('./utils'),
+  WSSecurityCert = require('./security/WSSecurityCert');
 
 class Client extends Base {
   constructor(wsdl, endpoint, options) {
@@ -232,9 +233,12 @@ class Client extends Base {
       prettyPrint = self.httpClient.options.prettyPrint;
     }
 
-    if (self.security && self.security.postProcess) {
+    if (self.security && self.security instanceof WSSecurityCert) {
       xml = self.security.postProcess(envelope.header, envelope.body);
     } else {
+      if (self.security && self.security.postProcess) {
+        self.security.postProcess(envelope.header, envelope.body);
+      }
       xml = envelope.doc.end({pretty: prettyPrint});
     }
 
