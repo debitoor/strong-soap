@@ -930,3 +930,4 @@ describe('myService', function() {
 ## Contributors
 
  * [All Contributors](https://github.com/strongloop/strong-soap/graphs/contributors)
+
