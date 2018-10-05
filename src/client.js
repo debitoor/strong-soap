@@ -349,4 +349,3 @@ class Client extends Base {
 }
 
 module.exports = Client;
-
