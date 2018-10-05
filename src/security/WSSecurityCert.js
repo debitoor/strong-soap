@@ -103,9 +103,11 @@ class WSSecurityCert extends Security {
     var xmlWithSec = headerElement.doc().end({pretty: true});
 
     this.signer.computeSignature(xmlWithSec);
-    var sig = this.signer.getSignatureXml();
 
+    var sig = this.signer.getSignatureXml();
     xmlHandler.parseXml(secElement, sig);
+
+    return this.signer.signedXml;
   }
 }
 
