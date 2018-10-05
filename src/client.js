@@ -14,7 +14,8 @@ var HttpClient = require('./http'),
   debug = require('debug')('strong-soap:client'),
   debugDetail = require('debug')('strong-soap:client:detail'),
   debugSensitive = require('debug')('strong-soap:client:sensitive'),
-  utils = require('./utils');
+  utils = require('./utils'),
+  WSSecurityCert = require('./security/WSSecurityCert');
 
 class Client extends Base {
   constructor(wsdl, endpoint, options) {
@@ -225,10 +226,6 @@ class Client extends Base {
     debug('client request, calling jsonToXml. args: %j', args);
     xmlHandler.jsonToXml(soapBodyElement, nsContext, inputBodyDescriptor, args);
 
-    if (self.security && self.security.postProcess) {
-      self.security.postProcess(envelope.header, envelope.body);
-    }
-
     //Bydefault pretty print is true and request envelope is created with newlines and indentations
     var prettyPrint = true;
     //some web services don't accept request envelope with newlines and indentations in which case user has to set {prettyPrint: false} as client option
@@ -236,8 +233,16 @@ class Client extends Base {
       prettyPrint = self.httpClient.options.prettyPrint;
     }
 
+    if (self.security && self.security instanceof WSSecurityCert) {
+      xml = self.security.postProcess(envelope.header, envelope.body);
+    } else {
+      if (self.security && self.security.postProcess) {
+        self.security.postProcess(envelope.header, envelope.body);
+      }
+      xml = envelope.doc.end({pretty: prettyPrint});
+    }
+
     message = envelope.body.toString({pretty: prettyPrint});
-    xml = envelope.doc.end({pretty: prettyPrint});
 
     debug('Request envelope: %s', xml);
 
