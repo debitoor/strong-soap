@@ -127,136 +127,144 @@ class Server extends Base {
   };
 
   _process(input, req, callback) {
-    var self = this,
-      pathname = url.parse(req.url).pathname.replace(/\/$/, ''),
-      obj = this.xmlHandler.xmlToJson(null, input),
-      body = obj.Body,
-      headers = obj.Header,
-      bindings = this.wsdl.definitions.bindings, binding,
-      operation, operationName,
-      serviceName, portName,
-      includeTimestamp = obj.Header && obj.Header.Security &&
-        obj.Header.Security.Timestamp;
+    (async () => {
+      try {
+        var self = this,
+          pathname = url.parse(req.url).pathname.replace(/\/$/, ''),
+          obj = this.xmlHandler.xmlToJson(null, input),
+          body = obj.Body,
+          headers = obj.Header,
+          bindings = this.wsdl.definitions.bindings, binding,
+          operation, operationName,
+          serviceName, portName,
+          includeTimestamp = obj.Header && obj.Header.Security &&
+            obj.Header.Security.Timestamp;
 
-    if (typeof self.authenticate === 'function') {
-      if (!obj.Header || !obj.Header.Security) {
-        throw new Error(g.f('No security header'));
-      }
-      if (!self.authenticate(obj.Header.Security)) {
-        throw new Error(g.f('Invalid username or password'));
-      }
-    }
-
-    if (typeof self.validateSignature === 'function') {
-      if (!obj.Header || !obj.Header.Security) {
-        throw new Error(g.f('No security header'));
-      }
-      if (!self.validateSignature(input)) {
-        throw new Error(g.f('Invalid signature'));
-      }
-    }
-
-    if (typeof self.log === 'function') {
-      self.log('info', 'Attempting to bind to ' + pathname);
-    }
-
-    // use port.location and current url to find the right binding
-    binding = (function(self) {
-      var services = self.wsdl.definitions.services;
-      var firstPort;
-      var name;
-      for (name in services) {
-        serviceName = name;
-        var service = services[serviceName];
-        var ports = service.ports;
-        for (name in ports) {
-          portName = name;
-          var port = ports[portName];
-          var portPathname = url.parse(port.location).pathname.replace(/\/$/, '');
-
-          if (typeof self.log === 'function') {
-            self.log('info', 'Trying ' + portName + ' from path ' + portPathname);
+        if (typeof self.authenticate === 'function') {
+          if (!obj.Header || !obj.Header.Security) {
+            throw new Error(g.f('No security header'));
           }
-
-          if (portPathname === pathname)
-            return port.binding;
-
-          // The port path is almost always wrong for generated WSDLs
-          if (!firstPort) {
-            firstPort = port;
+          if (!await self.authenticate(obj.Header.Security)) {
+            throw new Error(g.f('Invalid username or password'));
           }
         }
-      }
-      return !firstPort ? void 0 : firstPort.binding;
-    })(this);
 
-    if (!binding) {
-      throw new Error(g.f('Failed to bind to {{WSDL}}'));
-    }
+        if (typeof self.validateSignature === 'function') {
+          if (!obj.Header || !obj.Header.Security) {
+            throw new Error(g.f('No security header'));
+          }
+          if (!await self.validateSignature(input)) {
+            throw new Error(g.f('Invalid signature'));
+          }
+        }
 
-    try {
-      if (binding.style === 'rpc') {
-        operationName = Object.keys(body)[0];
+        if (typeof self.log === 'function') {
+          self.log('info', 'Attempting to bind to ' + pathname);
+        }
 
-        self.emit('request', obj, operationName);
-        if (headers)
-          self.emit('headers', headers, operationName);
+        // use port.location and current url to find the right binding
+        binding = (function (self) {
+          var services = self.wsdl.definitions.services;
+          var firstPort;
+          var name;
+          for (name in services) {
+            serviceName = name;
+            var service = services[serviceName];
+            var ports = service.ports;
+            for (name in ports) {
+              portName = name;
+              var port = ports[portName];
+              var portPathname = url.parse(port.location).pathname.replace(/\/$/, '');
 
-        self._executeMethod({
-          serviceName: serviceName,
-          portName: portName,
-          operationName: operationName,
-          outputName: operationName + 'Response',
-          args: body[operationName],
-          headers: headers,
-          style: 'rpc'
-        }, req, callback);
-      } else { //document style
-        var messageElemName = (Object.keys(body)[0] === 'attributes' ?
-          Object.keys(body)[1] : Object.keys(body)[0]);
-        var pair = binding.topElements[messageElemName];
+              if (typeof self.log === 'function') {
+                self.log('info', 'Trying ' + portName + ' from path ' + portPathname);
+              }
 
-        var operationName, outputName;
-        var operations = binding.operations;
-        //figure out the output name
-        for (var name in operations) {
-          var inputParts = operations[name].input.message.parts;
-          //find the first part of the input message. There could be more than one parts in input message.
-          var firstInPart = inputParts[Object.keys(inputParts)[0]];
-          if(firstInPart.element.$name === messageElemName) {
-            operationName = operations[name].$name;
-            if (operations[name].output != null) {
-              var outPart = operations[name].output.message.parts;
-              //there will be only one output part
-              var firstOutPart = outPart[Object.keys(outPart)[0]];
-              outputName = firstOutPart.element.$name;
+              if (portPathname === pathname)
+                return port.binding;
+
+              // The port path is almost always wrong for generated WSDLs
+              if (!firstPort) {
+                firstPort = port;
+              }
             }
-            break;
           }
+          return !firstPort ? void 0 : firstPort.binding;
+        })(this);
+
+        if (!binding) {
+          throw new Error(g.f('Failed to bind to {{WSDL}}'));
         }
 
-        self.emit('request', obj, operationName);
-        if (headers)
-          self.emit('headers', headers, operationName);
+        try {
+          if (binding.style === 'rpc') {
+            operationName = Object.keys(body)[0];
 
-        self._executeMethod({
-          serviceName: serviceName,
-          portName: portName,
-          operationName: operationName,
-          outputName: outputName,
-          args: body[messageElemName],
-          headers: headers,
-          style: 'document',
-          includeTimestamp: includeTimestamp
-        }, req, callback);
+            self.emit('request', obj, operationName);
+            if (headers)
+              self.emit('headers', headers, operationName);
+
+            self._executeMethod({
+              serviceName: serviceName,
+              portName: portName,
+              operationName: operationName,
+              outputName: operationName + 'Response',
+              args: body[operationName],
+              headers: headers,
+              style: 'rpc'
+            }, req, callback);
+          } else { //document style
+            var messageElemName = (Object.keys(body)[0] === 'attributes' ?
+              Object.keys(body)[1] : Object.keys(body)[0]);
+            var pair = binding.topElements[messageElemName];
+
+            var operationName, outputName;
+            var operations = binding.operations;
+            //figure out the output name
+            for (var name in operations) {
+              var inputParts = operations[name].input.message.parts;
+              //find the first part of the input message. There could be more than one parts in input message.
+              var firstInPart = inputParts[Object.keys(inputParts)[0]];
+              if (firstInPart.element.$name === messageElemName) {
+                operationName = operations[name].$name;
+                if (operations[name].output != null) {
+                  var outPart = operations[name].output.message.parts;
+                  //there will be only one output part
+                  var firstOutPart = outPart[Object.keys(outPart)[0]];
+                  outputName = firstOutPart.element.$name;
+                }
+                break;
+              }
+            }
+
+            self.emit('request', obj, operationName);
+            if (headers)
+              self.emit('headers', headers, operationName);
+
+            self._executeMethod({
+              serviceName: serviceName,
+              portName: portName,
+              operationName: operationName,
+              outputName: outputName,
+              args: body[messageElemName],
+              headers: headers,
+              style: 'document',
+              includeTimestamp: includeTimestamp
+            }, req, callback);
+          }
+        } catch (error) {
+          if (error.Fault !== undefined) {
+            return self._sendError(operations[name], error, callback, includeTimestamp);
+          }
+          //Revisit - is this needed?
+          throw error;
+        }
+      } catch (err) {
+        const error = err.stack || err;
+        const statusCode = 500;
+        callback(error, statusCode);
       }
-    } catch (error) {
-      if (error.Fault !== undefined) {
-        return self._sendError(operations[name], error, callback, includeTimestamp);
-      }
-      //Revisit - is this needed?
-      throw error;
-    }
+    })();
   };
 
   _executeMethod(options, req, callback) {
